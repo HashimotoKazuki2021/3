@@ -1,0 +1,97 @@
+using System;
+using System.Threading;
+
+class BankAccount
+{
+    private decimal balance;
+
+    // ロックオブジェクト1
+    private object lockObject1 = new object();
+
+    // ロックオブジェクト2
+    private object lockObject2 = new object();
+
+    public BankAccount(decimal initialBalance)
+    {
+        balance = initialBalance;
+    }
+
+    public void Transfer(decimal amount, BankAccount targetAccount)
+    {
+        lock (lockObject1)
+        {
+            Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} acquired lock1");
+
+            // ここで意図的にスレッドを一時停止してデッドロックを引き起こす
+            Thread.Sleep(100);
+
+            lock (lockObject2)
+            {
+                Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} acquired lock2");
+
+                if (balance >= amount)
+                {
+                    balance -= amount;
+                    targetAccount.ReceiveTransfer(amount);
+                    Console.WriteLine($"Transfer successful: ${amount} transferred from Account A to Account B");
+                }
+                else
+                {
+                    Console.WriteLine("Insufficient funds for transfer.");
+                }
+            }
+        }
+    }
+
+    public void ReceiveTransfer(decimal amount)
+    {
+        lock (lockObject2)
+        {
+            Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} acquired lock2");
+
+            // ここで意図的にスレッドを一時停止してデッドロックを引き起こす
+            Thread.Sleep(100);
+
+            lock (lockObject1)
+            {
+                Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} acquired lock1");
+
+                balance += amount;
+            }
+        }
+    }
+
+    public decimal GetBalance()
+    {
+        return balance;
+    }
+}
+
+class Program
+{
+    static void Main()
+    {
+        BankAccount accountA = new BankAccount(1000);
+        BankAccount accountB = new BankAccount(500);
+
+        // スレッド1: Account A から Account B に振り込み
+        Thread thread1 = new Thread(() => accountA.Transfer(200, accountB));
+
+        // スレッド2: Account B から Account A に振り込み
+        Thread thread2 = new Thread(() => accountB.Transfer(100, accountA));
+
+        thread1.Start();
+        thread2.Start();
+
+        thread1.Join();
+        thread2.Join();
+
+        // 残高を表示
+        Console.WriteLine($"Account A Balance: ${accountA.GetBalance()}");
+        Console.WriteLine($"Account B Balance: ${accountB.GetBalance()}");
+    }
+}
+
+この例では、TransferメソッドとReceiveTransferメソッドの中で異なる順番でロックを取得しています。これにより、2つのスレッドが互いのロックを待ち合う状態に陥り、デッドロックが発生します。
+
+デッドロックを回避するための修正として、一般的なアプローチは、ロックを取得する順番を統一することです。例えば、すべてのスレッドが共通の順番でロックを取得するように修正することが考えられます。
