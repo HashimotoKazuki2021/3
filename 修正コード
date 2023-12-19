@@ -1,0 +1,85 @@
+using System;
+using System.Threading;
+
+class BankAccount
+{
+    private decimal balance;
+
+    // 共通のロックオブジェクト
+    private static object commonLockObject = new object();
+
+    public BankAccount(decimal initialBalance)
+    {
+        balance = initialBalance;
+    }
+
+    public void Transfer(decimal amount, BankAccount targetAccount)
+    {
+        lock (commonLockObject)
+        {
+            Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} acquired common lock");
+
+            if (balance >= amount)
+            {
+                balance -= amount;
+
+                // 共通ロックを使って振り込み先のアカウントも更新
+                lock (commonLockObject)
+                {
+                    Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} acquired common lock for target account");
+
+                    targetAccount.ReceiveTransfer(amount);
+                }
+
+                Console.WriteLine($"Transfer successful: ${amount} transferred from Account A to Account B");
+            }
+            else
+            {
+                Console.WriteLine("Insufficient funds for transfer.");
+            }
+        }
+    }
+
+    public void ReceiveTransfer(decimal amount)
+    {
+        // 共通ロックを使って残高を増やす
+        lock (commonLockObject)
+        {
+            Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} acquired common lock for receiving transfer");
+
+            balance += amount;
+        }
+    }
+
+    public decimal GetBalance()
+    {
+        return balance;
+    }
+}
+
+class Program
+{
+    static void Main()
+    {
+        BankAccount accountA = new BankAccount(1000);
+        BankAccount accountB = new BankAccount(500);
+
+        // スレッド1: Account A から Account B に振り込み
+        Thread thread1 = new Thread(() => accountA.Transfer(200, accountB));
+
+        // スレッド2: Account B から Account A に振り込み
+        Thread thread2 = new Thread(() => accountB.Transfer(100, accountA));
+
+        thread1.Start();
+        thread2.Start();
+
+        thread1.Join();
+        thread2.Join();
+
+        // 残高を表示
+        Console.WriteLine($"Account A Balance: ${accountA.GetBalance()}");
+        Console.WriteLine($"Account B Balance: ${accountB.GetBalance()}");
+    }
+}
+
+この修正では、commonLockObjectという共通のロックオブジェクトを使って、どの順番でロックを取得してもデッドロックが発生しないようにしています。全てのスレッドが同じ順番でロックを取得することで、デッドロックを回避できます。ただし、これは単一の共通ロックが性能上のボトルネックとなる可能性があるため、実際のアプリケーションでは状況に応じて検討する必要があります。
